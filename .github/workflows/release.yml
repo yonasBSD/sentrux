@@ -50,11 +50,10 @@ jobs:
       - name: Link Pro crate paths
         shell: bash
         run: |
-          # sentrux-bin references sentrux-pro at ../../sentrux-pro (relative to sentrux-bin/)
-          # sentrux-pro references sentrux-core at ../sentrux-fresh/sentrux-core
-          # Create symlinks so both resolve in CI:
-          ln -sf "$(pwd)/sentrux-pro-checkout" ../sentrux-pro
-          ln -sf "$(pwd)" ../sentrux-fresh
+          # Move pro checkout to where sentrux-bin expects it (../../sentrux-pro from sentrux-bin/)
+          mv sentrux-pro-checkout ../sentrux-pro
+          # Patch sentrux-pro Cargo.toml: replace local dev path with CI path
+          sed -i.bak 's|../sentrux-fresh/sentrux-core|../sentrux/sentrux-core|' ../sentrux-pro/Cargo.toml
 
       - name: Build release binary (with Pro)
         run: cargo build --release --features pro --target ${{ matrix.target }}
