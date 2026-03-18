@@ -33,7 +33,7 @@ impl SentruxApp {
         let load_cjk = state.settings.load_cjk_fonts
             && std::env::var("SENTRUX_NO_CJK").is_err();
         setup_fonts(ctx, load_cjk);
-        setup_style(ctx, state.settings.ui_scale);
+        setup_style(ctx, state.settings.ui_scale, &state.theme_config);
 
         let (scan_cmd_tx, scan_cmd_rx) = bounded::<ScanCommand>(1);
         let (scan_msg_tx, scan_msg_rx) = bounded::<ScanMsg>(64);
@@ -366,7 +366,7 @@ fn setup_fonts(ctx: &egui::Context, load_cjk: bool) {
     ctx.set_fonts(fonts);
 }
 
-fn setup_style(ctx: &egui::Context, ui_scale: f32) {
+fn setup_style(ctx: &egui::Context, ui_scale: f32, tc: &crate::core::settings::ThemeConfig) {
     // Scale ALL UI (text + widgets) uniformly via pixels_per_point.
     // This affects both text styles AND hardcoded FontId sizes in panels.
     let base_ppp = ctx.pixels_per_point();
@@ -386,6 +386,6 @@ fn setup_style(ctx: &egui::Context, ui_scale: f32) {
     style.visuals.widgets.open.corner_radius = egui::CornerRadius::ZERO;
     style.visuals.popup_shadow = egui::epaint::Shadow::NONE;
     style.visuals.window_shadow = egui::epaint::Shadow::NONE;
-    style.visuals.window_stroke = egui::Stroke::new(1.0, egui::Color32::from_rgb(44, 46, 58));
+    style.visuals.window_stroke = egui::Stroke::new(1.0, tc.section_border);
     ctx.set_style(style);
 }

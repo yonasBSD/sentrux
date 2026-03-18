@@ -371,7 +371,7 @@ fn draw_file_text(
         return;
     }
 
-    let label_color = contrast_text_color(bg_color, dctx.tc.file_label, Color32::from_rgb(20, 20, 25));
+    let label_color = contrast_text_color(bg_color, dctx.tc.file_label, dctx.tc.canvas_bg);
     let stats_color = contrast_secondary_color(bg_color);
 
     let text_x = inset_rect.left() + dctx.px;
@@ -456,7 +456,7 @@ fn color_by_heat(ctx: &RenderContext, path: &str) -> Color32 {
     if h > 0.01 {
         heat::heat_color(h)
     } else {
-        Color32::from_rgb(50, 50, 55)
+        ctx.theme_config.canvas_dimmed
     }
 }
 
@@ -473,7 +473,7 @@ fn color_by_age(ctx: &RenderContext, path: &str) -> Color32 {
             let b = (60.0 + t * 140.0) as u8;
             Color32::from_rgb(r, g, b)
         }
-        None => Color32::from_rgb(70, 70, 70),
+        None => ctx.theme_config.text_muted,
     }
 }
 
@@ -516,7 +516,7 @@ fn color_by_git(ctx: &RenderContext, path: &str) -> Color32 {
         .get(path)
         .map(|e| e.gs.as_str())
         .unwrap_or("");
-    colors::git_color(gs)
+    colors::git_color(gs, ctx.theme_config)
 }
 
 fn color_by_exec_depth(ctx: &RenderContext, path: &str) -> Color32 {
@@ -527,7 +527,7 @@ fn color_by_exec_depth(ctx: &RenderContext, path: &str) -> Color32 {
         .copied()
         .unwrap_or(u32::MAX);
     if depth == u32::MAX {
-        Color32::from_rgb(50, 50, 50)
+        ctx.theme_config.no_data_surface
     } else {
         colors::exec_depth_color(depth)
     }
@@ -542,5 +542,5 @@ fn color_by_blast_radius(ctx: &RenderContext, path: &str) -> Color32 {
             (r, a.max_blast_radius)
         })
         .unwrap_or((0, 0));
-    colors::blast_radius_color(radius, max_radius)
+    colors::blast_radius_color(radius, max_radius, ctx.theme_config)
 }

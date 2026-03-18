@@ -377,6 +377,14 @@ pub struct ThemeConfig {
     pub toggle_edge: Color32,
     /// Toggle button: DSM active
     pub toggle_dsm: Color32,
+
+    // ── Renderer internal colors ──
+    /// Heat glow overlay tint (warm orange on dark, darker warm on light)
+    pub heat_glow: Color32,
+    /// Fallback surface for files with no data (exec depth unknown, no heat, etc.)
+    pub no_data_surface: Color32,
+    /// Dimmed canvas surface (heat mode "cold" files, inactive sections)
+    pub canvas_dimmed: Color32,
 }
 
 impl ThemeConfig {
@@ -450,6 +458,9 @@ fn theme_calm() -> ThemeConfig {
         toggle_inactive: Color32::from_rgb(120, 120, 120),
         toggle_edge: Color32::from_rgb(220, 180, 80),
         toggle_dsm: Color32::from_rgb(100, 200, 180),
+        heat_glow: Color32::from_rgb(255, 160, 40),
+        no_data_surface: Color32::from_rgb(50, 50, 55),
+        canvas_dimmed: Color32::from_rgb(50, 50, 55),
     }
 }
 
@@ -493,6 +504,9 @@ fn theme_dark() -> ThemeConfig {
         toggle_inactive: Color32::from_rgb(120, 120, 120),
         toggle_edge: Color32::from_rgb(220, 180, 80),
         toggle_dsm: Color32::from_rgb(100, 200, 180),
+        heat_glow: Color32::from_rgb(255, 160, 40),
+        no_data_surface: Color32::from_rgb(50, 50, 55),
+        canvas_dimmed: Color32::from_rgb(50, 50, 55),
     }
 }
 
@@ -536,6 +550,9 @@ fn theme_light() -> ThemeConfig {
         toggle_inactive: Color32::from_rgb(95, 95, 100),
         toggle_edge: Color32::from_rgb(130, 95, 10),
         toggle_dsm: Color32::from_rgb(20, 120, 100),
+        heat_glow: Color32::from_rgb(180, 100, 20),
+        no_data_surface: Color32::from_rgb(220, 220, 225),
+        canvas_dimmed: Color32::from_rgb(220, 220, 225),
     }
 }
 
@@ -579,6 +596,9 @@ fn theme_midnight() -> ThemeConfig {
         toggle_inactive: Color32::from_rgb(120, 120, 120),
         toggle_edge: Color32::from_rgb(220, 180, 80),
         toggle_dsm: Color32::from_rgb(100, 200, 180),
+        heat_glow: Color32::from_rgb(255, 160, 40),
+        no_data_surface: Color32::from_rgb(40, 40, 48),
+        canvas_dimmed: Color32::from_rgb(40, 40, 48),
     }
 }
 
@@ -622,6 +642,9 @@ fn theme_solarized() -> ThemeConfig {
         toggle_inactive: Color32::from_rgb(120, 140, 150),
         toggle_edge: Color32::from_rgb(181, 137, 0),
         toggle_dsm: Color32::from_rgb(42, 161, 152),
+        heat_glow: Color32::from_rgb(255, 160, 40),
+        no_data_surface: Color32::from_rgb(42, 60, 66),
+        canvas_dimmed: Color32::from_rgb(42, 60, 66),
     }
 }
 

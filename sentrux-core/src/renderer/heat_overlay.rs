@@ -4,7 +4,7 @@
 //! is a semi-transparent warm tint proportional to the file's decayed heat value.
 //! Also renders the activity trail: fading highlights on recently changed files.
 
-use super::{ColorMode, RectKind, RenderData, heat, RenderContext};
+use super::{ColorMode, RectKind, RenderData, heat, RenderContext, ThemeConfig};
 use egui::{Color32, CornerRadius, Stroke, StrokeKind};
 use std::collections::HashSet;
 
@@ -18,21 +18,27 @@ fn draw_ripple(painter: &egui::Painter, screen_rect: egui::Rect, progress: f64) 
 }
 
 /// Draw heat glow overlay for a single file rect (semi-transparent warm tint).
-fn draw_heat_glow(painter: &egui::Painter, screen_rect: egui::Rect, heat_value: f64) {
+fn draw_heat_glow(painter: &egui::Painter, screen_rect: egui::Rect, heat_value: f64, tc: &ThemeConfig) {
     if heat_value <= 0.05 { return; }
     // Scale for full 0-5 range: 5.0 -> alpha 80. [ref:4f5a9de5]
     let alpha = (heat_value * 16.0).min(80.0) as u8;
-    let glow = Color32::from_rgba_unmultiplied(255, 160, 40, alpha);
+    let [r, g, b, _] = tc.heat_glow.to_array();
+    let glow = Color32::from_rgba_unmultiplied(r, g, b, alpha);
     painter.rect_filled(screen_rect, CornerRadius::ZERO, glow);
 }
 
 /// Draw a single activity trail dot for a file.
-fn draw_trail_dot(painter: &egui::Painter, screen_rect: egui::Rect, heat_value: f64, dot_radius: f32) {
+fn draw_trail_dot(painter: &egui::Painter, screen_rect: egui::Rect, heat_value: f64, dot_radius: f32, tc: &ThemeConfig) {
     let alpha = (heat_value * 16.0).min(80.0) as u8;
     if alpha <= 10 { return; }
     let dot_pos = egui::pos2(screen_rect.left() + 2.0, screen_rect.top() + 2.0);
     let dot_rect = egui::Rect::from_min_size(dot_pos, egui::vec2(dot_radius * 2.0, dot_radius * 2.0));
-    painter.rect_filled(dot_rect, CornerRadius::ZERO, Color32::from_rgba_unmultiplied(255, 120, 30, alpha));
+    // Trail dot is a slightly dimmed version of the heat glow color
+    let [r, g, b, _] = tc.heat_glow.to_array();
+    let dr = (r as f32 * 0.75) as u8;
+    let dg = (g as f32 * 0.75) as u8;
+    let db = (b as f32 * 0.75) as u8;
+    painter.rect_filled(dot_rect, CornerRadius::ZERO, Color32::from_rgba_unmultiplied(dr, dg, db, alpha));
 }
 
 /// Draw activity trail: fading glow markers for recent changes.
@@ -61,7 +67,7 @@ fn draw_activity_trail(
         let screen_rect = vp.world_to_screen_rect(r.x, r.y, r.w, r.h, canvas_origin);
         if screen_rect.width() < 2.0 { continue; }
         let h = ctx.heat.get_heat(path, ctx.frame_instant, ctx.settings.heat_half_life);
-        draw_trail_dot(painter, screen_rect, h, ctx.settings.trail_dot_radius);
+        draw_trail_dot(painter, screen_rect, h, ctx.settings.trail_dot_radius, ctx.theme_config);
     }
 }
 
@@ -77,7 +83,7 @@ fn draw_file_heat(
     }
     if ctx.color_mode != ColorMode::Heat {
         let h = ctx.heat.get_heat(path, ctx.frame_instant, ctx.settings.heat_half_life);
-        draw_heat_glow(painter, screen_rect, h);
+        draw_heat_glow(painter, screen_rect, h, ctx.theme_config);
     }
 }
 

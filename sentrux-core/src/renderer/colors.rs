@@ -4,19 +4,23 @@
 //! to `Color32` values. Palette is desaturated for readability — colors
 //! distinguish categories without competing with text labels or edges.
 
+use crate::core::settings::ThemeConfig;
 use egui::Color32;
 
 /// Blast radius → red gradient. High blast = bright red (dangerous to change),
 /// low blast = dim green (safe to change).
-pub fn blast_radius_color(radius: u32, max_radius: u32) -> Color32 {
+pub fn blast_radius_color(radius: u32, max_radius: u32, tc: &ThemeConfig) -> Color32 {
     if max_radius == 0 {
-        return Color32::from_rgb(60, 140, 80); // all safe
+        return tc.diff_added; // all safe — uses theme's "added/green" semantic color
     }
     let t = (radius as f32 / max_radius as f32).min(1.0);
     // green(safe) → yellow → red(dangerous)
-    let r = (60.0 + t * 195.0) as u8;
-    let g = (160.0 - t * 120.0) as u8;
-    let b = (80.0 - t * 50.0) as u8;
+    // Derive gradient endpoints from theme semantic colors
+    let [gr, gg, gb, _] = tc.diff_added.to_array();
+    let [rr, rg, rb, _] = tc.status_error.to_array();
+    let r = (gr as f32 + t * (rr as f32 - gr as f32)) as u8;
+    let g = (gg as f32 + t * (rg as f32 - gg as f32)) as u8;
+    let b = (gb as f32 + t * (rb as f32 - gb as f32)) as u8;
     Color32::from_rgb(r, g, b)
 }
 
@@ -28,16 +32,16 @@ pub fn language_color(lang: &str) -> Color32 {
     Color32::from_rgb(rgb[0], rgb[1], rgb[2])
 }
 
-/// Git status → color (VS Code dark theme palette — muted, professional)
-pub fn git_color(gs: &str) -> Color32 {
+/// Git status → color from ThemeConfig semantic palette.
+pub fn git_color(gs: &str, tc: &ThemeConfig) -> Color32 {
     match gs {
-        "A"  => Color32::from_rgb(115, 201, 145), // muted green — new/added
-        "M"  => Color32::from_rgb(103, 150, 230), // muted blue — modified
-        "MM" => Color32::from_rgb(130, 160, 240), // slightly brighter blue — staged+working
-        "D"  => Color32::from_rgb(224, 108, 117), // muted red — deleted
-        "R"  => Color32::from_rgb(209, 154, 102), // muted amber — renamed
-        "?"  => Color32::from_rgb(115, 201, 145), // same green — untracked (new to git)
-        _    => Color32::from_rgb(70, 70, 70),
+        "A"  => tc.diff_added,     // green — new/added
+        "M"  => tc.diff_modified,  // blue — modified
+        "MM" => tc.diff_modified.linear_multiply(1.15), // slightly brighter — staged+working
+        "D"  => tc.diff_removed,   // red — deleted
+        "R"  => tc.status_warning, // amber — renamed
+        "?"  => tc.diff_added,     // green — untracked (new to git)
+        _    => tc.text_muted,     // fallback — muted
     }
 }
 
