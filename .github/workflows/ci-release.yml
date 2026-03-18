@@ -1,24 +1,27 @@
-name: CI
+name: CI (Release)
 
+# Runs AFTER Grammar Build completes on tag pushes.
+# This avoids the race condition where CI needs grammars
+# that haven't been built yet.
 on:
-  push:
-    branches: [main]
-    tags-ignore: ['v*']  # Don't run on tag pushes — ci-release handles those
-  pull_request:
-    branches: [main]
+  workflow_run:
+    workflows: ["Build Grammars Bundle"]
+    types: [completed]
 
 jobs:
   test:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     strategy:
       fail-fast: false
       matrix:
         os: [macos-latest, ubuntu-latest]
-        # Windows: tree-sitter-scss build script incompatible with MSVC
-        # Will re-enable when upstream fixes -Wno-unused-parameter flag
     runs-on: ${{ matrix.os }}
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_branch }}
+          fetch-depth: 0
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -45,25 +48,15 @@ jobs:
       - name: Install language grammars
         shell: bash
         run: |
-          # Try each recent release tag until we find one with grammars.
-          # On tag pushes, the NEW release won't have grammars yet (still building).
-          # The previous release always has them. No race condition.
+          # Grammars are guaranteed to exist — this workflow only runs
+          # after Grammar Build succeeds. Download from the current tag.
           PLATFORM=$([ "$RUNNER_OS" = "macOS" ] && echo "darwin-arm64" || echo "linux-x86_64")
+          TAG=${{ github.event.workflow_run.head_branch }}
+          URL="https://github.com/sentrux/sentrux/releases/download/${TAG}/grammars-${PLATFORM}.tar.gz"
           mkdir -p ~/.sentrux/plugins
-          DOWNLOADED=false
-          for TAG in $(git tag --sort=-v:refname | head -5); do
-            URL="https://github.com/sentrux/sentrux/releases/download/${TAG}/grammars-${PLATFORM}.tar.gz"
-            if curl -fsSL "$URL" -o /tmp/grammars.tar.gz 2>/dev/null; then
-              echo "Grammar bundle downloaded from ${TAG}"
-              tar xzf /tmp/grammars.tar.gz -C ~/.sentrux/plugins/
-              DOWNLOADED=true
-              break
-            fi
-          done
-          if [ "$DOWNLOADED" = false ]; then
-            echo "Grammar download failed from all recent tags"
-          fi
-          # Sync embedded plugin configs (TOML) without triggering grammar download
+          curl -fsSL "$URL" -o /tmp/grammars.tar.gz
+          tar xzf /tmp/grammars.tar.gz -C ~/.sentrux/plugins/
+          echo "Grammar bundle downloaded from ${TAG}"
           SENTRUX_SKIP_GRAMMAR_DOWNLOAD=1 cargo run -- --version || true
 
       - name: Test
