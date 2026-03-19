@@ -200,27 +200,48 @@ fn is_leap(y: i64) -> bool {
     (y % 4 == 0 && y % 100 != 0) || y % 400 == 0
 }
 
-/// Load and validate license from ~/.sentrux/license.key.
+/// Search paths for license.key, in priority order.
+/// Handles sudo (where ~ becomes /root instead of /home/user).
+fn license_search_paths() -> Vec<std::path::PathBuf> {
+    let mut paths = Vec::new();
+
+    // 1. Current user's home (~/.sentrux/license.key)
+    if let Some(home) = dirs::home_dir() {
+        paths.push(home.join(".sentrux").join("license.key"));
+    }
+
+    // 2. Original user's home when running via sudo
+    //    sudo sets $SUDO_USER to the real user who invoked sudo
+    if let Ok(sudo_user) = std::env::var("SUDO_USER") {
+        // Linux: /home/<user>, macOS: /Users/<user>
+        #[cfg(target_os = "macos")]
+        paths.push(std::path::PathBuf::from(format!("/Users/{}/.sentrux/license.key", sudo_user)));
+        #[cfg(not(target_os = "macos"))]
+        paths.push(std::path::PathBuf::from(format!("/home/{}/.sentrux/license.key", sudo_user)));
+    }
+
+    // 3. System-wide location (for shared/server installs)
+    #[cfg(unix)]
+    paths.push(std::path::PathBuf::from("/etc/sentrux/license.key"));
+
+    paths
+}
+
+/// Load and validate license from disk.
+/// Tries multiple paths: user home, sudo user home, system-wide.
 /// Returns the validated tier, or Free if no valid license found.
 pub fn load_license_from_disk() -> Tier {
-    let path = match dirs::home_dir() {
-        Some(h) => h.join(".sentrux").join("license.key"),
-        None => return Tier::Free,
-    };
-    let content = match std::fs::read_to_string(&path) {
-        Ok(c) => c,
-        Err(_) => return Tier::Free,
-    };
-    match validate_license(&content) {
-        Some(license) => {
-            crate::debug_log!("[license] Valid: {} ({}), expires {}", license.user, license.tier, license.expires);
-            license.tier
-        }
-        None => {
-            crate::debug_log!("[license] Invalid or expired license at {}", path.display());
-            Tier::Free
+    for path in license_search_paths() {
+        if let Ok(content) = std::fs::read_to_string(&path) {
+            if let Some(license) = validate_license(&content) {
+                crate::debug_log!("[license] Valid: {} ({}), expires {} [{}]",
+                    license.user, license.tier, license.expires, path.display());
+                return license.tier;
+            }
+            crate::debug_log!("[license] Invalid or expired at {}", path.display());
         }
     }
+    Tier::Free
 }
 
 /// Initialize the license system. Call once at startup.
