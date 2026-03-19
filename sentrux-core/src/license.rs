@@ -244,9 +244,148 @@ pub fn load_license_from_disk() -> Tier {
     Tier::Free
 }
 
-/// Initialize the license system. Call once at startup.
+// ── Pro plugin loading ──
+
+/// Search paths for pro.dylib, same order as license.key.
+fn pro_dylib_search_paths() -> Vec<std::path::PathBuf> {
+    let mut paths = Vec::new();
+
+    let dylib_name = if cfg!(target_os = "macos") {
+        "pro.dylib"
+    } else if cfg!(target_os = "windows") {
+        "pro.dll"
+    } else {
+        "pro.so"
+    };
+
+    if let Some(home) = dirs::home_dir() {
+        paths.push(home.join(".sentrux").join("pro").join(dylib_name));
+    }
+
+    if let Ok(sudo_user) = std::env::var("SUDO_USER") {
+        #[cfg(target_os = "macos")]
+        paths.push(std::path::PathBuf::from(format!("/Users/{}/.sentrux/pro/{}", sudo_user, dylib_name)));
+        #[cfg(not(target_os = "macos"))]
+        paths.push(std::path::PathBuf::from(format!("/home/{}/.sentrux/pro/{}", sudo_user, dylib_name)));
+    }
+
+    paths
+}
+
+/// Stored Pro plugin library — kept alive for the process lifetime
+/// so that function pointers from the dylib remain valid.
+static PRO_LIB: std::sync::OnceLock<libloading::Library> = std::sync::OnceLock::new();
+
+/// Try to load the Pro plugin dylib.
+/// Returns true if Pro plugin was loaded successfully.
+fn try_load_pro_dylib(license: &ValidatedLicense) -> bool {
+    for path in pro_dylib_search_paths() {
+        if !path.exists() {
+            continue;
+        }
+        crate::debug_log!("[pro] Found pro plugin at {}", path.display());
+
+        // Read watermark from dylib and verify it matches the license
+        match read_watermark(&path) {
+            Some(watermark_id) if watermark_id == license.id => {
+                crate::debug_log!("[pro] Watermark matches license {}", license.id);
+            }
+            Some(watermark_id) => {
+                crate::debug_log!("[pro] Watermark mismatch: dylib={}, license={}", watermark_id, license.id);
+                continue; // dylib belongs to a different user
+            }
+            None => {
+                // No watermark found — accept (dev builds, or watermark not yet implemented)
+                crate::debug_log!("[pro] No watermark found, accepting dylib");
+            }
+        }
+
+        // Load the library
+        match unsafe { libloading::Library::new(&path) } {
+            Ok(lib) => {
+                // Call the init function
+                let init_result: Result<libloading::Symbol<unsafe extern "C" fn()>, _> =
+                    unsafe { lib.get(b"sentrux_pro_init") };
+                match init_result {
+                    Ok(init_fn) => {
+                        unsafe { init_fn() };
+                        // Store library so it stays loaded for the process lifetime
+                        let _ = PRO_LIB.set(lib);
+                        crate::debug_log!("[pro] Plugin loaded and initialized");
+                        return true;
+                    }
+                    Err(e) => {
+                        crate::debug_log!("[pro] Failed to find sentrux_pro_init: {}", e);
+                    }
+                }
+            }
+            Err(e) => {
+                crate::debug_log!("[pro] Failed to load dylib: {}", e);
+            }
+        }
+    }
+    false
+}
+
+/// Read the 64-byte watermark from a pro dylib.
+/// The watermark is a known byte pattern: 16 bytes marker + 32 bytes license_id + 16 bytes HMAC.
+/// Returns the license_id string if found.
+fn read_watermark(path: &std::path::Path) -> Option<String> {
+    let data = std::fs::read(path).ok()?;
+    // Search for the watermark marker: "SENTRUX_WM_V1\0\0\0" (16 bytes)
+    let marker = b"SENTRUX_WM_V1\0\0\0";
+    let pos = data.windows(marker.len()).position(|w| w == marker)?;
+    let id_start = pos + marker.len();
+    let id_end = id_start + 32;
+    if id_end > data.len() {
+        return None;
+    }
+    // License ID is stored as UTF-8 bytes, null-padded
+    let id_bytes = &data[id_start..id_end];
+    let id = std::str::from_utf8(id_bytes).ok()?;
+    let id = id.trim_end_matches('\0');
+    if id.is_empty() {
+        None
+    } else {
+        Some(id.to_string())
+    }
+}
+
+/// Initialize the license system + Pro plugin. Call once at startup.
+///
+/// 1. Reads license.key from disk (tries user home, sudo home, system-wide)
+/// 2. Validates Ed25519 signature + expiry
+/// 3. If valid Pro/Team: tries to load pro.dylib
+/// 4. Sets the global tier
 pub fn init() {
-    let tier = load_license_from_disk();
+    // Load and validate license
+    let mut tier = Tier::Free;
+    let mut license: Option<ValidatedLicense> = None;
+
+    for path in license_search_paths() {
+        if let Ok(content) = std::fs::read_to_string(&path) {
+            if let Some(lic) = validate_license(&content) {
+                crate::debug_log!("[license] Valid: {} ({}), expires {} [{}]",
+                    lic.user, lic.tier, lic.expires, path.display());
+                tier = lic.tier;
+                license = Some(lic);
+                break;
+            }
+            crate::debug_log!("[license] Invalid or expired at {}", path.display());
+        }
+    }
+
+    // Try to load Pro plugin if licensed
+    if tier.is_pro() {
+        if let Some(ref lic) = license {
+            if try_load_pro_dylib(lic) {
+                crate::debug_log!("[pro] Pro plugin active");
+            } else {
+                crate::debug_log!("[pro] No pro plugin found — Pro license active but running with built-in features only");
+            }
+        }
+    }
+
     set_tier(tier);
 }
 

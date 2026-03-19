@@ -155,8 +155,8 @@ enum PluginAction {
 // ---------------------------------------------------------------------------
 
 pub fn run() -> eframe::Result<()> {
-    // Pro initialization is handled by the sentrux-pro crate externally
-    // before calling run(). See sentrux-pro/src/main.rs.
+    // Initialize license + Pro plugin (reads ~/.sentrux/license.key, loads pro.dylib if valid)
+    sentrux_core::license::init();
 
     // Step 1: Download missing grammar binaries (may overwrite configs with old versions)
     ensure_grammars_installed();
